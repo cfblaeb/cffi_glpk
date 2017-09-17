@@ -1,40 +1,16 @@
-import cffi
+from cffi import FFI
+ffibuilder = FFI()
 
-ffibuilder = cffi.FFI()
-ffibuilder.set_source("glpk_cffi", """
+ffibuilder.set_source("glpk_cffi", r"""
     #include <glpk.h>
     #include <stdarg.h>
     #include <stddef.h>
     """, libraries=['glpk', 'm', 'gmp'])
 
 ffibuilder.cdef("""
-/* glpk.h (GLPK API) */
-
-/***********************************************************************
-*  This code is part of GLPK (GNU Linear Programming Kit).
-*
-*  Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-*  2009, 2010, 2011, 2013, 2014, 2015 Andrew Makhorin, Department for
-*  Applied Informatics, Moscow Aviation Institute, Moscow, Russia. All
-*  rights reserved. E-mail: <mao@gnu.org>.
-*
-*  GLPK is free software: you can redistribute it and/or modify it
-*  under the terms of the GNU General Public License as published by
-*  the Free Software Foundation, either version 3 of the License, or
-*  (at your option) any later version.
-*
-*  GLPK is distributed in the hope that it will be useful, but WITHOUT
-*  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-*  or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
-*  License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with GLPK. If not, see <http://www.gnu.org/licenses/>.
-***********************************************************************/
-
 /* library version numbers: */
 #define GLP_MAJOR_VERSION  4
-#define GLP_MINOR_VERSION  57
+#define GLP_MINOR_VERSION  61
 
 typedef struct glp_prob glp_prob;
 /* LP/MIP problem object */
@@ -86,8 +62,10 @@ typedef struct
 {     /* basis factorization control parameters */
       int msg_lev;            /* (not used) */
       int type;               /* factorization type: */
+
 #define GLP_BF_LUF      0x00  /* plain LU-factorization */
 #define GLP_BF_BTF      0x10  /* block triangular LU-factorization */
+
 #define GLP_BF_FT       0x01  /* Forrest-Tomlin (LUF only) */
 #define GLP_BF_BG       0x02  /* Schur compl. + Bartels-Golub */
 #define GLP_BF_GR       0x03  /* Schur compl. + Givens rotation */
@@ -122,6 +100,9 @@ typedef struct
       int r_test;             /* ratio test technique: */
 #define GLP_RT_STD      0x11  /* standard (textbook) */
 #define GLP_RT_HAR      0x22  /* Harris' two-pass ratio test */
+
+#define GLP_RT_FLIP     0x33  /* long-step (flip-flop) ratio test */
+
       double tol_bnd;         /* spx.tol_bnd */
       double tol_dj;          /* spx.tol_dj */
       double tol_piv;         /* spx.tol_piv */
@@ -187,10 +168,14 @@ typedef struct
       int ps_heur;            /* proximity search heuristic */
       int ps_tm_lim;          /* proxy time limit, milliseconds */
       int sr_heur;            /* simple rounding heuristic */
+
       int use_sol;            /* use existing solution */
       const char *save_sol;   /* filename to save every new solution */
       int alien;              /* use alien solver */
-      double foo_bar[24];     /* (reserved) */
+
+      int flip;               /* use long-step dual simplex */
+
+      double foo_bar[23];     /* (reserved) */
 } glp_iocp;
 
 typedef struct
@@ -489,11 +474,15 @@ double glp_get_col_dual(glp_prob *P, int j);
 int glp_get_unbnd_ray(glp_prob *P);
 /* determine variable causing unboundedness */
 
+
 int glp_get_it_cnt(glp_prob *P);
 /* get simplex solver iteration count */
 
+
+
 void glp_set_it_cnt(glp_prob *P, int it_cnt);
 /* set simplex solver iteration count */
+
 
 int glp_interior(glp_prob *P, const glp_iptcp *parm);
 /* solve LP problem with the interior-point method */
@@ -714,6 +703,37 @@ int glp_ios_heur_sol(glp_tree *T, const double x[]);
 void glp_ios_terminate(glp_tree *T);
 /* terminate the solution process */
 
+int glp_gmi_cut(glp_prob *P, int j, int ind[], double val[], double
+      phi[]);
+/* generate Gomory's mixed integer cut (core routine) */
+
+int glp_gmi_gen(glp_prob *P, glp_prob *pool, int max_cuts);
+/* generate Gomory's mixed integer cuts */
+
+/* typedef struct glp_mir glp_mir; */
+/* MIR cut generator workspace */
+
+/* glp_mir *glp_mir_init(glp_prob *P); */
+/* create and initialize MIR cut generator */
+
+/* int glp_mir_gen(glp_prob *P, glp_mir *mir, glp_prob *pool); */
+/* generate mixed integer rounding (MIR) cuts */
+
+/* void glp_mir_free(glp_mir *mir); */
+/* delete MIR cut generator workspace */
+
+/* typedef struct glp_cfg glp_cfg; */
+/* conflict graph descriptor */
+
+/* glp_cfg *glp_cfg_init(glp_prob *P); */
+/* create and initialize conflict graph */
+
+/* void glp_cfg_free(glp_cfg *G); */
+/* delete conflict graph descriptor */
+
+/* int glp_clq_cut(glp_prob *P, glp_cfg *G, int ind[], double val[]); */
+/* generate clique cut from conflict graph */
+
 void glp_init_mpscp(glp_mpscp *parm);
 /* initialize MPS format control parameters */
 
@@ -743,6 +763,9 @@ int glp_write_prob(glp_prob *P, int flags, const char *fname);
 glp_tran *glp_mpl_alloc_wksp(void);
 /* allocate the MathProg translator workspace */
 
+void glp_mpl_init_rand(glp_tran *tran, int seed);
+/* initialize pseudo-random number generator */
+
 int glp_mpl_read_model(glp_tran *tran, const char *fname, int skip);
 /* read and translate model section */
 
@@ -760,9 +783,6 @@ int glp_mpl_postsolve(glp_tran *tran, glp_prob *prob, int sol);
 
 void glp_mpl_free_wksp(glp_tran *tran);
 /* free the MathProg translator workspace */
-
-int glp_main(int argc, const char *argv[]);
-/* stand-alone LP/MIP solver */
 
 int glp_read_cnfsat(glp_prob *P, const char *fname);
 /* read CNF-SAT problem data in DIMACS format */
@@ -785,6 +805,9 @@ int glp_init_env(void);
 const char *glp_version(void);
 /* determine library version */
 
+const char *glp_config(const char *option);
+/* determine library configuration */
+
 int glp_free_env(void);
 /* free GLPK environment */
 
@@ -792,6 +815,9 @@ void glp_puts(const char *s);
 /* write string on terminal */
 
 void glp_printf(const char *fmt, ...);
+/* write formatted output on terminal */
+
+/* void glp_vprintf(const char *fmt, va_list arg); */
 /* write formatted output on terminal */
 
 int glp_term_out(int flag);
@@ -806,19 +832,31 @@ int glp_open_tee(const char *name);
 int glp_close_tee(void);
 /* stop copying terminal output to text file */
 
+/* #define GLP_ERRFUNC_DEFINED */
 typedef void (*glp_errfunc)(const char *fmt, ...);
 
+/* #define glp_error glp_error_(__FILE__, __LINE__) */
 glp_errfunc glp_error_(const char *file, int line);
 /* display fatal error message and terminate execution */
 
-/*int glp_at_error(void);*/
+int glp_at_error(void);
 /* check for error state */
 
+/*
+#define glp_assert(expr) \
+      ((void)((expr) || (glp_assert_(#expr, __FILE__, __LINE__), 1)))
+*/
 void glp_assert_(const char *expr, const char *file, int line);
 /* check for logical condition */
 
 void glp_error_hook(void (*func)(void *info), void *info);
 /* install hook to intercept abnormal termination */
+
+/* #define glp_malloc(size) glp_alloc(1, size) */
+/* allocate memory block (obsolete) */
+
+/* #define glp_calloc(n, size) glp_alloc(n, size) */
+/* allocate memory block (obsolete) */
 
 void *glp_alloc(int n, int size);
 /* allocate memory block */
@@ -835,6 +873,12 @@ void glp_mem_limit(int limit);
 void glp_mem_usage(int *count, int *cpeak, size_t *total,
       size_t *tpeak);
 /* get memory usage information */
+
+double glp_time(void);
+/* determine current universal time */
+
+double glp_difftime(double t1, double t0);
+/* compute difference between two time values */
 
 typedef struct glp_graph glp_graph;
 typedef struct glp_vertex glp_vertex;
@@ -1019,18 +1063,19 @@ int glp_read_ccdata(glp_graph *G, int v_wgt, const char *fname);
 int glp_write_ccdata(glp_graph *G, int v_wgt, const char *fname);
 /* write graph in DIMACS clique/coloring format */
 
-int glp_netgen(glp_graph *G, int v_rhs, int a_cap, int a_cost, const int parm[16]);
+int glp_netgen(glp_graph *G, int v_rhs, int a_cap, int a_cost,
+      const int parm[1+15]);
 /* Klingman's network problem generator */
 
-void glp_netgen_prob(int nprob, int parm[16]);
+void glp_netgen_prob(int nprob, int parm[1+15]);
 /* Klingman's standard network problem instance */
 
 int glp_gridgen(glp_graph *G, int v_rhs, int a_cap, int a_cost,
-      const int parm[15]);
+      const int parm[1+14]);
 /* grid-like network problem generator */
 
 int glp_rmfgen(glp_graph *G, int *s, int *t, int a_cap,
-      const int parm[6]);
+      const int parm[1+5]);
 /* Goldfarb's maximum flow problem generator */
 
 int glp_weak_comp(glp_graph *G, int v_num);
@@ -1047,7 +1092,8 @@ int glp_wclique_exact(glp_graph *G, int v_wgt, double *sol, int v_set);
 
 
 /* eof */
-    """)
+
+""")
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)
