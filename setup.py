@@ -2,10 +2,10 @@ from setuptools import setup
 
 setup(
     name='cffi_glpk',
-    version='0.3',
+    version='0.4',
     url='https://github.com/cfblaeb/cffi_glpk',
     author='laeb',
-    author_email='laeb@biosustain.dtu.dk',
+    author_email='laeb@dtu.dk',
     description='CFFI bindings for GLPK',
 
     setup_requires=["cffi>=1.0.0"],

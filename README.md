@@ -1,6 +1,6 @@
 # cffi_glpk
 * CFFI bindings for GLPK
-* Build for GLPK 4.61, may or may not work for other versions.
+* Build for GLPK 4.65, may or may not work for other versions.
 * Usage :
   * Briefly: from glpk_cffi import lib, ffi
   * See example/example.py complete example
